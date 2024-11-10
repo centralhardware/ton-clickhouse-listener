@@ -1,5 +1,4 @@
 import com.clickhouse.jdbc.ClickHouseDataSource
-import kotliquery.queryOf
 import kotliquery.sessionOf
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -72,7 +71,7 @@ fun main() = runBlocking {
 
     val request = Request.Builder()
         .url("https://tonapi.io/v2/sse/accounts/transactions?accounts=ALL")
-        .header("Authorization", "Bearer AEUPUUAS7GEOMOIAAAACCYEQ2ENGQZNA6PA336W5XCQSZDUPGWVVATWPHMW7TPO7X4BHN4Y")
+        .header("Authorization", "Bearer ${System.getenv("TONAPI_TOKEN")}")
         .build()
 
     val flow = sseFlow(client, request)
