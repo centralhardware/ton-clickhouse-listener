@@ -33,7 +33,7 @@ tasks {
         archiveBaseName.set("shadow")
         mergeServiceFiles()
         manifest {
-            attributes(mapOf("Main-Class" to "MainKt"))
+            attributes(mapOf("Main-Class" to "TonListenerKt"))
         }
     }
 }
