@@ -18,6 +18,7 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import java.sql.SQLException
+import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 import javax.sql.DataSource
 
@@ -33,15 +34,15 @@ val json = Json {
     isLenient = true
 }
 
-fun save(data: List<String>) = sessionOf(dataSource).use { session ->
+fun save(data: List<Pair<LocalDateTime, String>>) = sessionOf(dataSource).use { session ->
     val parsedData = data.mapNotNull {
         try {
-            val jsonElement = json.parseToJsonElement(it)
+            val jsonElement = json.parseToJsonElement(it.second)
             val accountId = jsonElement.jsonObject["account_id"]?.jsonPrimitive?.content
             val lt = jsonElement.jsonObject["lt"]?.jsonPrimitive?.longOrNull
             val txHash = jsonElement.jsonObject["tx_hash"]?.jsonPrimitive?.content
 
-            listOf(accountId, lt, txHash)
+            listOf(it.first, accountId, lt, txHash)
         } catch (e: Exception) {
             println("Ошибка при парсинге JSON: ${e.message}")
             null
@@ -50,20 +51,20 @@ fun save(data: List<String>) = sessionOf(dataSource).use { session ->
 
     if (parsedData.isNotEmpty()) {
         session.batchPreparedStatement(
-            "INSERT INTO ton.transactions (account_id, lt, tx_hash) VALUES (?, ?, ?)",
+            "INSERT INTO ton.transactions (date_time, account_id, lt, tx_hash) VALUES (?, ?, ?, ?)",
             parsedData
         )
     }
 }
 
-fun sseFlow(client: OkHttpClient, request: Request): Flow<String> = callbackFlow {
+fun sseFlow(client: OkHttpClient, request: Request): Flow<Pair<LocalDateTime, String>> = callbackFlow {
     val eventSource = EventSources.createFactory(client).newEventSource(request, object : EventSourceListener() {
         override fun onOpen(eventSource: EventSource, response: Response) {
             println("Подключено к SSE")
         }
 
         override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-            trySend(data).isSuccess
+            trySend(Pair(LocalDateTime.now(), data)).isSuccess
         }
 
         override fun onClosed(eventSource: EventSource) {
