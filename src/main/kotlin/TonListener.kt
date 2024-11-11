@@ -7,6 +7,10 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.chunked
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -24,20 +28,32 @@ val dataSource: DataSource =
         throw RuntimeException(e)
     }
 
+val json = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
+
 fun save(data: List<String>) = sessionOf(dataSource).use { session ->
-    session.batchPreparedStatement(
-        """
-            INSERT INTO ton.transactions (account_id, lt, tx_hash)
-            SELECT
-                JSONExtractString(json_data, 'account_id') AS account_id,
-                JSONExtractUInt(json_data, 'lt') AS lt,
-                JSONExtractString(json_data, 'tx_hash') AS tx_hash
-            FROM (
-                SELECT
-                    :data AS json_data
-                );
-            """, data.map { listOf(it) }
-    )
+    val parsedData = data.mapNotNull {
+        try {
+            val jsonElement = json.parseToJsonElement(it)
+            val accountId = jsonElement.jsonObject["account_id"]?.jsonPrimitive?.content
+            val lt = jsonElement.jsonObject["lt"]?.jsonPrimitive?.longOrNull
+            val txHash = jsonElement.jsonObject["tx_hash"]?.jsonPrimitive?.content
+
+            listOf(accountId, lt, txHash)
+        } catch (e: Exception) {
+            println("Ошибка при парсинге JSON: ${e.message}")
+            null
+        }
+    }
+
+    if (parsedData.isNotEmpty()) {
+        session.batchPreparedStatement(
+            "INSERT INTO ton.transactions (account_id, lt, tx_hash) VALUES (?, ?, ?)",
+            parsedData
+        )
+    }
 }
 
 fun sseFlow(client: OkHttpClient, request: Request): Flow<String> = callbackFlow {
